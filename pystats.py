@@ -4,6 +4,7 @@ import optparse
 import os
 import sys
 import time
+import re
 
 class Error(Exception): pass
 class FileError(Error): pass
@@ -79,17 +80,46 @@ class Tail(object):
             self.file.seek(pos)
             time.sleep(self.sleep)
 
+def transport(line):
+    print line
+
 def handle(path, begin):
     tail = Tail(path, begin)
     try: 
         tail.open()
         for line in tail:
-            print line
+            transport(line)
     finally:
         tail.close()
 
 if __name__ == '__main__':
-    try:
-        handle('/data0/nginx/logs/mobiletrends.mobile.sina.cn_access.log', 2)
-    except KeyboardInterrupt:
-        sys.exit(0)
+    parser = optparse.OptionParser()
+    parser.add_option('-f', '--file', 
+                      dest='file',
+                      help='file to tail into statsD',
+                      metavar='FILE',)
+    parser.add_option('-H', '--host',
+                      dest='host',
+                      default='127.0.0.1',
+                      help='destination StatsD host server',
+                      metavar='HOST',)
+    parser.add_option('-p', '--port',
+                      dest='port',
+                      type='int',
+                      default=8125,
+                      help='destination StatsD port',
+                      metavar='PORT',)
+    parser.add_option('-b', '--begin',
+                      dest='begin',
+                      type='int',
+                      default='2',
+                      help='where does tail begin, 0 means beginning, 1 means current, 2 means end',)
+    options, args = parser.parse_args()
+
+    if options.file:
+        try:
+            handle(path=options.file, begin=options.begin)
+        except KeyboardInterrupt:
+            sys.exit(0)
+    else:
+        parser.print_help()
