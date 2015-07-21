@@ -5,6 +5,7 @@ import os
 import sys
 import time
 import re
+import statsd
 
 class Error(Exception): pass
 class FileError(Error): pass
@@ -80,15 +81,24 @@ class Tail(object):
             self.file.seek(pos)
             time.sleep(self.sleep)
 
-def transport(line):
-    print line
+def transport(line, host, port):
+    result = re.search('(?<=GET /)[\w/]+', line)
+    if result == None:
+        result = re.search('(?<=POST /)[\w/]+', line)
+    if result != None:
+        interface = result.group(0)
+    else:
+        return False
 
-def handle(path, begin):
+    stats = statsd.StatsClient(host, port, prefix=None, maxudpsize=512)
+    stats.incr(interface)
+
+def handle(path, begin, host='127.0.0.1', port=8125):
     tail = Tail(path, begin)
     try: 
         tail.open()
         for line in tail:
-            transport(line)
+            transport(line, host, port)
     finally:
         tail.close()
 
@@ -118,7 +128,10 @@ if __name__ == '__main__':
 
     if options.file:
         try:
-            handle(path=options.file, begin=options.begin)
+            handle(path=options.file, 
+                   begin=options.begin,
+                   host=options.host,
+                   port=options.port)
         except KeyboardInterrupt:
             sys.exit(0)
     else:
