@@ -12,7 +12,7 @@ class FileError(Error): pass
 
 class Tail(object):
 
-    def __init__(self, path, begin, sleep=1.0, reopen_count=3):
+    def __init__(self, path, begin, sleep=0.01, reopen_count=5):
         self.path = path
         self.begin = begin
         self.sleep = sleep
@@ -69,17 +69,56 @@ class Tail(object):
                 self.open(tail=False)
                 return True
             except FileError:
-                time.sleep(self.sleep)
+                time.sleep(self.sleep*10)
             reopen_count -= 1
         return False
 
     def wait(self, pos):
         if self.check(pos):
             if not self.reopen():
-                raise Error('Unable to reopen file: %s' % self.path)
+                time.sleep(self.sleep*10)
         else:
             self.file.seek(pos)
             time.sleep(self.sleep)
+
+class Parser(object):
+
+    def __init__(self, category):
+        self.category = category
+        self.operator = {'access':self.__access,
+                         'error':self.__error,
+                         'response':self.__response,
+                         'subreq':self.__subreq}
+        process = self.operator.get(self.category, False)
+        if not process:
+            print('no such category')
+            sys.exit(0)
+        else:
+            self.process = process
+
+    def __access(self, line):
+        result = re.search('(?<=GET /)[\w/]+', line)
+        if result == None:
+            result = re.search('(?<=POST /)[\w/]+', line)
+        if result != None:
+            interface = result.group(0)
+
+    def __error(self, line):
+        result = re.search('(?<=GET /)[\w/]+', line)
+        if result == None:
+            result = re.search('(?<=POST /)[\w/]+', line)
+        if result != None:
+            interface = result.group(0)
+
+    def __response(self, line):
+        result = re.search('(?<=GET /)[\w/]+', line)
+        if result == None:
+            result = re.search('(?<=POST /)[\w/]+', line)
+        if result != None:
+            interface = result.group(0)
+
+    def __subreq(self, line):
+        pass
 
 def transport(line, host, port):
     result = re.search('(?<=GET /)[\w/]+', line)
@@ -93,7 +132,7 @@ def transport(line, host, port):
     stats = statsd.StatsClient(host, port, prefix=None, maxudpsize=512)
     stats.incr(interface)
 
-def handle(path, begin, host='127.0.0.1', port=8125):
+def handle(path, begin, category, host='127.0.0.1', port=8125):
     tail = Tail(path, begin)
     try: 
         tail.open()
@@ -124,12 +163,17 @@ if __name__ == '__main__':
                       type='int',
                       default='2',
                       help='where does tail begin, 0 means beginning, 1 means current, 2 means end',)
+    parser.add_option('-c', '--category',
+                      dest='category',
+                      default='access',
+                      help='which category of file to collect',)
     options, args = parser.parse_args()
 
     if options.file:
         try:
             handle(path=options.file, 
                    begin=options.begin,
+                   category=options.category,
                    host=options.host,
                    port=options.port)
         except KeyboardInterrupt:
