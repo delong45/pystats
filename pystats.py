@@ -97,23 +97,31 @@ class Parser(object):
             self.process = process
 
     def __access(self, line):
-        result = re.search('(?<=GET /)[\w/]+', line)
+        result = re.search('(?<=GET /)[^?]+', line)
         if result == None:
-            result = re.search('(?<=POST /)[\w/]+', line)
+            result = re.search('(?<=POST /)[^?]+', line)
         if result != None:
             interface = result.group(0)
+
+        result = re.search('(?<=\^")[^"]+(?="\^ \^")', line)
+        if result != None:
+            response_time = result.group(0)
 
     def __error(self, line):
-        result = re.search('(?<=GET /)[\w/]+', line)
+        result = re.search('(?<=GET /)[^?]+', line)
         if result == None:
-            result = re.search('(?<=POST /)[\w/]+', line)
+            result = re.search('(?<=POST /)[^?]+', line)
         if result != None:
             interface = result.group(0)
 
+        result = re.search('(?<=subrequest: "/)[^"]+', line)
+        if result != None:
+            subrequest = result.group(0)
+
     def __response(self, line):
-        result = re.search('(?<=GET /)[\w/]+', line)
+        result = re.search('(?<=GET /)[^?]+', line)
         if result == None:
-            result = re.search('(?<=POST /)[\w/]+', line)
+            result = re.search('(?<=POST /)[^?]+', line)
         if result != None:
             interface = result.group(0)
 
