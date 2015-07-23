@@ -35,4 +35,5 @@ usage
 reference
 ---
 [Getting Started with Monitoring using Graphite](http://www.infoq.com/articles/graphite-intro)
+
 [10 Things I Learned Deploying Graphite](https://kevinmccarthy.org/2013/07/18/10-things-i-learned-deploying-graphite/)
