@@ -1,1 +1,9 @@
-system of collecting log data
+pystats
+===
+pystats is a simple and useful program.
+
+install
+---
+
+usage
+---
