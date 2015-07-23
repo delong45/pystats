@@ -4,6 +4,13 @@ pystats is a simple and useful program.It is a little tool to collect and format
 
 install
 ---
+* server: 
+  install graphite; install statsd
+* client: 
+  install [pystatsd](https://github.com/jsocol/pystatsd)
+* clone the project
+* start the pystats:
+  python pystats.py -f access.log
 
 usage
 ---
