@@ -27,10 +27,10 @@ usage
       -H HOST, --host=HOST  destination StatsD host server
       -p PORT, --port=PORT  destination StatsD port
       -b BEGIN, --begin=BEGIN
-                        where does tail begin, 0 means beginning, 1 means
-                        current, 2 means end
+                            where does tail begin, 0 means beginning, 1 means
+                            current, 2 means end
       -c CATEGORY, --category=CATEGORY
-                        which category of file to collect
+                            which category of file to collect
                         
 reference
 ---
