@@ -6,7 +6,8 @@ install
 ---
 * server: 
   
-    install graphite; install statsd
+    install graphite
+    install statsd
 * client: 
   
     install [pystatsd](https://github.com/jsocol/pystatsd)
