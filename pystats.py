@@ -83,50 +83,77 @@ class Tail(object):
 
 class Parser(object):
 
-    def __init__(self, category):
+    def __init__(self, stats, category):
+        self.stats = stats
         self.category = category
         self.operator = {'access':self.__access,
                          'error':self.__error,
-                         'response':self.__response,
                          'subreq':self.__subreq}
         process = self.operator.get(self.category, False)
         if not process:
-            print('no such category')
+            print('No such category: [access]|[error]|[subreq]')
             sys.exit(0)
         else:
             self.process = process
 
     def __access(self, line):
-        result = re.search('(?<=GET /)[^?]+', line)
+        result = re.search('(?<=GET /)[^?^.]+', line)
         if result == None:
-            result = re.search('(?<=POST /)[^?]+', line)
+            result = re.search('(?<=POST /)[^ ^.]+', line)
         if result != None:
             interface = result.group(0)
+            key = 'query_per_second.' + interface
+            self.stats.incr(key)
+        else:
+            return
 
         result = re.search('(?<=\^")[^"]+(?="\^ \^")', line)
         if result != None:
-            response_time = result.group(0)
+            time = float(result.group(0))
+            key = 'response_time.' + interface
+            self.stats.timing(key, time*1000)
 
     def __error(self, line):
-        result = re.search('(?<=GET /)[^?]+', line)
+        result = re.search('(?<=GET /)[^?^.]+', line)
         if result == None:
-            result = re.search('(?<=POST /)[^?]+', line)
+            result = re.search('(?<=POST /)[^ ^.]+', line)
         if result != None:
             interface = result.group(0)
+            key = 'error.' + interface
+            self.stats.incr(key)
+        else:
+            return
 
-        result = re.search('(?<=subrequest: "/)[^"]+', line)
+        result = re.search('(?<=subrequest: "/)[^"^.]+', line)
         if result != None:
             subrequest = result.group(0)
-
-    def __response(self, line):
-        result = re.search('(?<=GET /)[^?]+', line)
-        if result == None:
-            result = re.search('(?<=POST /)[^?]+', line)
-        if result != None:
-            interface = result.group(0)
+            key = key + '_subreqs.' + subrequest 
+            self.stats.incr(key)
 
     def __subreq(self, line):
-        pass
+        #result = re.search('(?<=] /)[^ ^.]+', line)
+        try:
+            separator = ' '
+            line_list = line.split(separator)
+            interface = line_list[2]
+            status = int(line_list[3])
+            time = float(line_list[4])
+
+            pos = interface.find('.')
+            if pos != -1:
+                interface = interface[:pos]
+            if interface[:1] == '/':
+                interface = interface[1:]
+
+            qps_key = 'subreq.query_per_second.' + interface
+            self.stats.incr(qps_key)
+            response_time_key = 'subreq_response_time.' + interface
+            self.stats.timing(response_time_key, time*1000)
+            if status != 200:
+                exception_status_key = 'subreq.exception_status.' + interface
+                self.stats.incr(exception_status_key)
+        except Exception:
+            pass
 
 def transport(line, host, port):
     result = re.search('(?<=GET /)[\w/]+', line)
@@ -141,11 +168,14 @@ def transport(line, host, port):
     stats.incr(interface)
 
 def handle(path, begin, category, host='127.0.0.1', port=8125):
+    stats = statsd.StatsClient(host, port, prefix=None, maxudpsize=512)
+    log_parser = Parser(stats, category)
     tail = Tail(path, begin)
     try: 
         tail.open()
         for line in tail:
-            transport(line, host, port)
+            #transport(line, host, port)
+            log_parser.process(line)
     finally:
         tail.close()
 
