@@ -96,64 +96,61 @@ class Parser(object):
         else:
             self.process = process
 
-    def __access(self, line):
-        result = re.search('(?<=GET /)[^?^.]+', line)
-        if result == None:
-            result = re.search('(?<=POST /)[^ ^.]+', line)
-        if result != None:
-            interface = result.group(0)
-            key = 'query_per_second.' + interface
-            self.stats.incr(key)
-        else:
-            return
+        self.access_reg = re.compile('(GET|POST) /([^ "\?]+).* HTTP/1\.1.*\^"([^"]+)"\^ \^"')
+        self.error_reg = re.compile('(GET|POST) /([^ "\?]+).* HTTP/1\.1')
+        self.error_subreq_reg = re.compile('subrequest: "/([^ "\?]+).*upstream')
+        self.subreq_reg = re.compile('\[.*\] /([^ ]+) ([^ ]+) ([^ ]+) \[')
 
-        result = re.search('(?<=\^")[^"]+(?="\^ \^")', line)
+    def adjust(self, interface):
+        if interface[:1] == '/':
+            interface = interface[1:]
+        interface = interface.replace('.', '-')
+        return interface
+
+    def __access(self, line):
+        result = self.access_reg.search(line)
         if result != None:
-            time = float(result.group(0))
-            key = 'response_time.' + interface
-            self.stats.timing(key, time*1000)
+            interface = result.group(2)
+            interface = self.adjust(interface)
+            qps_key = 'query_per_second(127).' + interface
+            self.stats.incr(qps_key)
+
+            time = float(result.group(3))
+            time_key = 'response_time(127).' + interface
+            self.stats.timing(time_key, time*1000)
 
     def __error(self, line):
-        result = re.search('(?<=GET /)[^?^.]+', line)
-        if result == None:
-            result = re.search('(?<=POST /)[^ ^.]+', line)
+        result = self.error_reg.search(line)
         if result != None:
-            interface = result.group(0)
-            key = 'error.' + interface
+            interface = result.group(2)
+            interface = self.adjust(interface)
+            key = 'error(127).' + interface
             self.stats.incr(key)
         else:
             return
 
-        result = re.search('(?<=subrequest: "/)[^"^.]+', line)
+        result = self.error_subreq_reg.search(line)
         if result != None:
-            subrequest = result.group(0)
-            key = key + '_subreqs.' + subrequest 
+            subrequest = result.group(1)
+            subrequest = self.adjust(subrequest)
+            key = key + '_subreqs(127).' + subrequest 
             self.stats.incr(key)
 
     def __subreq(self, line):
-        #result = re.search('(?<=] /)[^ ^.]+', line)
-        try:
-            separator = ' '
-            line_list = line.split(separator)
-            interface = line_list[2]
-            status = int(line_list[3])
-            time = float(line_list[4])
+        result = self.subreq_reg.search(line)
+        if result != None:
+            interface = result.group(1)
+            interface = self.adjust(interface)
+            status = int(result.group(2))
+            time = float(result.group(3))
 
-            pos = interface.find('.')
-            if pos != -1:
-                interface = interface[:pos]
-            if interface[:1] == '/':
-                interface = interface[1:]
-
-            qps_key = 'subreq.query_per_second.' + interface
+            qps_key = 'subreq(127).query_per_second.' + interface
             self.stats.incr(qps_key)
-            response_time_key = 'subreq_response_time.' + interface
-            self.stats.timing(response_time_key, time*1000)
-            if status != 200:
-                exception_status_key = 'subreq.exception_status.' + interface
+            time_key = 'subreq_response_time(127).' + interface
+            self.stats.incr(time_key, time*1000)
+            if status != 300:
+                exception_status_key = 'subreq(127).exception_status.' + interface
                 self.stats.incr(exception_status_key)
-        except Exception:
-            pass
 
 def transport(line, host, port):
     result = re.search('(?<=GET /)[\w/]+', line)
