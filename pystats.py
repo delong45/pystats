@@ -124,7 +124,7 @@ class Parser(object):
         if result != None:
             interface = result.group(2)
             interface = self.adjust(interface)
-            key = 'error(127).' + interface
+            key = 'error(127_new).' + interface
             self.stats.incr(key)
         else:
             return
@@ -133,7 +133,7 @@ class Parser(object):
         if result != None:
             subrequest = result.group(1)
             subrequest = self.adjust(subrequest)
-            key = key + '_subreqs(127).' + subrequest 
+            key = key + '_subreqs.' + subrequest 
             self.stats.incr(key)
 
     def __subreq(self, line):
@@ -147,7 +147,7 @@ class Parser(object):
             qps_key = 'subreq(127).query_per_second.' + interface
             self.stats.incr(qps_key)
             time_key = 'subreq_response_time(127).' + interface
-            self.stats.incr(time_key, time*1000)
+            self.stats.timing(time_key, time*1000)
             if status != 300:
                 exception_status_key = 'subreq(127).exception_status.' + interface
                 self.stats.incr(exception_status_key)
