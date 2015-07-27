@@ -69,14 +69,14 @@ class Tail(object):
                 self.open(tail=False)
                 return True
             except FileError:
-                time.sleep(self.sleep*10)
+                time.sleep(self.sleep)
             reopen_count -= 1
         return False
 
     def wait(self, pos):
         if self.check(pos):
             if not self.reopen():
-                time.sleep(self.sleep*10)
+                time.sleep(self.sleep)
         else:
             self.file.seek(pos)
             time.sleep(self.sleep)
@@ -112,11 +112,11 @@ class Parser(object):
         if result != None:
             interface = result.group(2)
             interface = self.adjust(interface)
-            qps_key = 'query_per_second(127).' + interface
+            qps_key = 'query_per_second.' + interface
             self.stats.incr(qps_key)
 
             time = float(result.group(3))
-            time_key = 'response_time(127).' + interface
+            time_key = 'response_time.' + interface
             self.stats.timing(time_key, time*1000)
 
     def __error(self, line):
@@ -124,7 +124,7 @@ class Parser(object):
         if result != None:
             interface = result.group(2)
             interface = self.adjust(interface)
-            key = 'error(127_new).' + interface
+            key = 'error.' + interface
             self.stats.incr(key)
         else:
             return
@@ -144,12 +144,12 @@ class Parser(object):
             status = int(result.group(2))
             time = float(result.group(3))
 
-            qps_key = 'subreq(127).query_per_second.' + interface
+            qps_key = 'subreq.query_per_second.' + interface
             self.stats.incr(qps_key)
-            time_key = 'subreq_response_time(127).' + interface
+            time_key = 'subreq_response_time.' + interface
             self.stats.timing(time_key, time*1000)
             if status != 300:
-                exception_status_key = 'subreq(127).exception_status.' + interface
+                exception_status_key = 'subreq.exception_status.' + interface
                 self.stats.incr(exception_status_key)
 
 def transport(line, host, port):
