@@ -12,7 +12,7 @@ class FileError(Error): pass
 
 class Tail(object):
 
-    def __init__(self, path, begin, sleep=0.01, reopen_count=5):
+    def __init__(self, path, begin, sleep=0.001, reopen_count=5):
         self.path = path
         self.begin = begin
         self.sleep = sleep
@@ -69,14 +69,14 @@ class Tail(object):
                 self.open(tail=False)
                 return True
             except FileError:
-                time.sleep(self.sleep)
+                time.sleep(self.sleep*10)
             reopen_count -= 1
         return False
 
     def wait(self, pos):
         if self.check(pos):
             if not self.reopen():
-                time.sleep(self.sleep)
+                time.sleep(self.sleep*10)
         else:
             self.file.seek(pos)
             time.sleep(self.sleep)
