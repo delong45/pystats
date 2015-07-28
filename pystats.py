@@ -97,8 +97,7 @@ class Parser(object):
             self.process = process
 
         self.access_reg = re.compile('(GET|POST) /([^ "\?]+).* HTTP/1\.1.*\^"([^"]+)"\^ \^"')
-        self.error_reg = re.compile('(GET|POST) /([^ "\?]+).* HTTP/1\.1')
-        self.error_subreq_reg = re.compile('subrequest: "/([^ "\?]+).*upstream')
+        self.error_reg = re.compile('(GET|POST) /([^ "\?]+).* HTTP/1\.1.*subrequest: "/([^ "\?]+).*upstream')
         self.subreq_reg = re.compile('\[.*\] /([^ ]+) ([^ ]+) ([^ ]+) \[')
 
     def adjust(self, interface):
@@ -124,16 +123,9 @@ class Parser(object):
         if result != None:
             interface = result.group(2)
             interface = self.adjust(interface)
-            key = 'error.' + interface
-            self.stats.incr(key)
-        else:
-            return
-
-        result = self.error_subreq_reg.search(line)
-        if result != None:
-            subrequest = result.group(1)
+            subrequest = result.group(3)
             subrequest = self.adjust(subrequest)
-            key = key + '_subreqs.' + subrequest 
+            key = 'error.' + interface + '_subreqs.' + subrequest
             self.stats.incr(key)
 
     def __subreq(self, line):
