@@ -12,7 +12,7 @@ class FileError(Error): pass
 
 class Tail(object):
 
-    def __init__(self, path, begin, sleep=0.01, reopen_count=5):
+    def __init__(self, path, begin, sleep=1, reopen_count=5):
         self.path = path
         self.begin = begin
         self.sleep = sleep
@@ -115,12 +115,12 @@ class Parser(object):
 
             interface = result.group(3)
             interface = self.adjust(interface)
-            qps_key = 'query_per_second.' + interface
+            qps_key = 'test.query_per_second.' + interface
             self.stats.incr(qps_key, timestamp)
 
-            time = float(result.group(4))
-            time_key = 'response_time.' + interface
-            self.stats.timing(time_key, time*1000, timestamp)
+            rtime = float(result.group(4))
+            time_key = 'test.response_time.' + interface
+            self.stats.timing(time_key, rtime*1000, timestamp)
 
     def __error(self, line):
         result = self.error_reg.search(line)
@@ -133,7 +133,7 @@ class Parser(object):
             interface = self.adjust(interface)
             subrequest = result.group(4)
             subrequest = self.adjust(subrequest)
-            key = 'error.' + interface + '_subreqs.' + subrequest
+            key = 'test.error.' + interface + '_subreqs.' + subrequest
             self.stats.incr(key, timestamp)
 
     def __subreq(self, line):
@@ -146,14 +146,14 @@ class Parser(object):
             interface = result.group(2)
             interface = self.adjust(interface)
             status = int(result.group(3))
-            time = float(result.group(4))
+            rtime = float(result.group(4))
 
-            qps_key = 'subreq.query_per_second.' + interface
+            qps_key = 'test.subreq.query_per_second.' + interface
             self.stats.incr(qps_key, timestamp)
-            time_key = 'subreq_response_time.' + interface
-            self.stats.timing(time_key, time*1000, timestamp)
+            time_key = 'test.subreq_response_time.' + interface
+            self.stats.timing(time_key, rtime*1000, timestamp)
             if status != 200:
-                exception_status_key = 'subreq.exception_status.' + interface
+                exception_status_key = 'test.subreq.exception_status.' + interface
                 self.stats.incr(exception_status_key, timestamp)
 
 def handle(path, begin, category, host='127.0.0.1', port=2003):
@@ -175,7 +175,7 @@ if __name__ == '__main__':
                       metavar='FILE',)
     parser.add_option('-H', '--host',
                       dest='host',
-                      default='127.0.0.1',
+                      default='10.77.96.122',
                       help='destination Graphite host server',
                       metavar='HOST',)
     parser.add_option('-p', '--port',
