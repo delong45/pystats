@@ -5,7 +5,7 @@ import os
 import sys
 import time
 import re
-import graphite
+import cache
 
 class Error(Exception): pass
 class FileError(Error): pass
@@ -101,9 +101,8 @@ class Parser(object):
         self.subreq_reg = re.compile('\[([^ ]+) .*\] /([^ ]+) ([^ ]+) ([^ ]+) \[')
 
     def adjust(self, interface):
-        if interface[:1] == '/':
-            interface = interface[1:]
         interface = interface.replace('.', '-')
+        interface = interface.replace('/', '-')
         return interface
 
     def __access(self, line):
@@ -115,12 +114,12 @@ class Parser(object):
 
             interface = result.group(3)
             interface = self.adjust(interface)
-            qps_key = 'test.query_per_second.' + interface
+            qps_key = 'test2.query_per_second.' + interface
             self.stats.incr(qps_key, timestamp)
 
             rtime = float(result.group(4))
-            time_key = 'test.response_time.' + interface
-            self.stats.timing(time_key, rtime*1000, timestamp)
+            time_key = 'test2.response_time.' + interface
+            self.stats.timing(time_key, timestamp, rtime*1000)
 
     def __error(self, line):
         result = self.error_reg.search(line)
@@ -133,7 +132,7 @@ class Parser(object):
             interface = self.adjust(interface)
             subrequest = result.group(4)
             subrequest = self.adjust(subrequest)
-            key = 'test.error.' + interface + '_subreqs.' + subrequest
+            key = 'test2.error.' + interface + '_subreqs.' + subrequest
             self.stats.incr(key, timestamp)
 
     def __subreq(self, line):
@@ -148,16 +147,16 @@ class Parser(object):
             status = int(result.group(3))
             rtime = float(result.group(4))
 
-            qps_key = 'test.subreq.query_per_second.' + interface
+            qps_key = 'test2.subreq.query_per_second.' + interface
             self.stats.incr(qps_key, timestamp)
-            time_key = 'test.subreq_response_time.' + interface
-            self.stats.timing(time_key, rtime*1000, timestamp)
+            time_key = 'test2.subreq_response_time.' + interface
+            self.stats.timing(time_key, timestamp, rtime*1000)
             if status != 200:
                 exception_status_key = 'test.subreq.exception_status.' + interface
                 self.stats.incr(exception_status_key, timestamp)
 
 def handle(path, begin, category, host='127.0.0.1', port=2003):
-    stats = graphite.Graphite(host, port)
+    stats = cache.Cache(host, port)
     log_parser = Parser(stats, category)
     tail = Tail(path, begin)
     try: 
