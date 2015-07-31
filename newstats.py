@@ -114,11 +114,11 @@ class Parser(object):
 
             interface = result.group(3)
             interface = self.adjust(interface)
-            qps_key = 'test2.query_per_second.' + interface
+            qps_key = 'uve.access.qps.' + interface
             self.stats.incr(qps_key, timestamp)
 
             rtime = float(result.group(4))
-            time_key = 'test2.response_time.' + interface
+            time_key = 'uve.access.response_time' + interface
             self.stats.timing(time_key, timestamp, rtime*1000)
 
     def __error(self, line):
@@ -132,7 +132,7 @@ class Parser(object):
             interface = self.adjust(interface)
             subrequest = result.group(4)
             subrequest = self.adjust(subrequest)
-            key = 'test2.error.' + interface + '_subreqs.' + subrequest
+            key = 'uve.error.' + interface + '_subreqs_qps.' + subrequest
             self.stats.incr(key, timestamp)
 
     def __subreq(self, line):
@@ -147,16 +147,16 @@ class Parser(object):
             status = int(result.group(3))
             rtime = float(result.group(4))
 
-            qps_key = 'test2.subreq.query_per_second.' + interface
+            qps_key = 'uve.subreq.qps.' + interface
             self.stats.incr(qps_key, timestamp)
-            time_key = 'test2.subreq_response_time.' + interface
+            time_key = 'uve.subreq.response_time.' + interface
             self.stats.timing(time_key, timestamp, rtime*1000)
             if status != 200:
-                exception_status_key = 'test.subreq.exception_status.' + interface
+                exception_status_key = 'uve.subreq.exception_status_qps.' + interface
                 self.stats.incr(exception_status_key, timestamp)
 
 def handle(path, begin, category, host='127.0.0.1', port=2003):
-    stats = cache.Cache(host, port)
+    stats = cache.vCache(host, port)
     log_parser = Parser(stats, category)
     tail = Tail(path, begin)
     try: 
@@ -170,18 +170,18 @@ if __name__ == '__main__':
     parser = optparse.OptionParser()
     parser.add_option('-f', '--file', 
                       dest='file',
-                      help='file to tail into Graphite',
+                      help='file to tail into Server',
                       metavar='FILE',)
     parser.add_option('-H', '--host',
                       dest='host',
                       default='10.77.96.122',
-                      help='destination Graphite host server',
+                      help='destination Server host server',
                       metavar='HOST',)
     parser.add_option('-p', '--port',
                       dest='port',
                       type='int',
-                      default=2003,
-                      help='destination Graphite port',
+                      default=33333,
+                      help='destination Server port',
                       metavar='PORT',)
     parser.add_option('-b', '--begin',
                       dest='begin',

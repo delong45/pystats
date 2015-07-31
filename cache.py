@@ -19,9 +19,12 @@ class Cache(object):
         self.sock.connect((self.host, self.port))
 
     def reconnect(self):
-        self.sock.close()
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.connect()
+        try:
+            self.sock.close()
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.connect()
+        except Exception:
+            pass
 
     def incr(self, key, timestamp, value=1):
         if self.counter_cache.has_key(timestamp):
@@ -35,28 +38,28 @@ class Cache(object):
             self.counter_cache[timestamp] = {}
             self.counter_cache[timestamp][key] = value
 
-    def create_timer(self, value):
+    def create_timer(self, value, num=1):
         timer = {}
-        timer['count'] = 1
+        timer['count'] = num
         timer['sum'] = value
         timer['list'] = []
         timer['list'].append(value)
         return timer
 
-    def timing(self, key, timestamp, value):
+    def timing(self, key, timestamp, value, num=1):
         if self.timer_cache.has_key(timestamp):
             if self.timer_cache[timestamp].has_key(key):
-                self.timer_cache[timestamp][key]['count'] += 1
+                self.timer_cache[timestamp][key]['count'] += num
                 self.timer_cache[timestamp][key]['sum'] += value
                 self.timer_cache[timestamp][key]['list'].append(value)
             else:
-                new_timer = self.create_timer(value)
+                new_timer = self.create_timer(value, num)
                 self.timer_cache[timestamp][key] = {}
                 self.timer_cache[timestamp][key] = new_timer
         else:
             if self.is_full('timer'):
                 self.send('timer')
-            new_timer = self.create_timer(value)
+            new_timer = self.create_timer(value, num)
             self.timer_cache[timestamp] = {}
             self.timer_cache[timestamp][key] = {}
             self.timer_cache[timestamp][key] = new_timer
@@ -116,3 +119,21 @@ class Cache(object):
                 self.sock.send(msg)
             except Exception:
                 self.reconnect()
+
+class vCache(Cache):
+
+    def __init__(self, host='10.77.96.122', port=33333, max_size=120):
+        Cache.__init__(self, host, port, max_size)
+
+    def timer_format(self, timestamp, item):
+        msg = ''
+        keys = item.keys()
+        for key in keys:
+            count = item[key]['count']
+            sum = item[key]['sum']
+            line = key + ' ' + str(count) + ' ' + str(sum) + ' ' + str(timestamp) + '\n'
+            if msg:
+                msg += line
+            else:
+                msg = line
+        return msg

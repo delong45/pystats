@@ -140,7 +140,7 @@ class Parser(object):
             self.stats.incr(qps_key)
             time_key = 'subreq_response_time.' + interface
             self.stats.timing(time_key, time*1000)
-            if status != 300:
+            if status != 200:
                 exception_status_key = 'subreq.exception_status.' + interface
                 self.stats.incr(exception_status_key)
 
