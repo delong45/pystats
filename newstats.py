@@ -118,7 +118,7 @@ class Parser(object):
             self.stats.incr(qps_key, timestamp)
 
             rtime = float(result.group(4))
-            time_key = 'uve.access.response_time' + interface
+            time_key = 'uve.access.response_time.' + interface
             self.stats.timing(time_key, timestamp, rtime*1000)
 
     def __error(self, line):

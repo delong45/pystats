@@ -13,6 +13,7 @@ class Forkcore(object):
         s.bind(("", port))
         s.listen(5000)
         self.s = s
+        self.conn_list = []
         self.worker = worker
         self.process()
     
@@ -41,6 +42,8 @@ class Forkcore(object):
                 if fd == self.s.fileno():
                     conn,addr = self.s.accept()
                     epoll.register(conn.fileno(), select.EPOLLIN|select.EPOLLET)
-                    self.worker(conn, addr)
+                    self.conn_list.append(conn)
                 else:
-                    print 'process fd: ', fd
+                    for conn in self.conn.list:
+                        if fd == conn.fileno():
+                            self.worker(conn)

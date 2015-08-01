@@ -122,7 +122,7 @@ class Cache(object):
 
 class vCache(Cache):
 
-    def __init__(self, host='10.77.96.122', port=33333, max_size=120):
+    def __init__(self, host='10.77.96.122', port=33333, max_size=60):
         Cache.__init__(self, host, port, max_size)
 
     def timer_format(self, timestamp, item):
