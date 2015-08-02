@@ -7,14 +7,18 @@ import socket
 
 class Forkcore(object):
 
-    def __init__(self, worker, port=3333):
+    def __init__(self, time_worker, qps_worker, port=3333):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(("", port))
         s.listen(5000)
         self.s = s
         self.conn_list = []
-        self.worker = worker
+        self.incomplete_line = ''
+        self.unread_line = ''
+        self.left_line = ''
+        self.time_worker = time_worker
+        self.qps_worker = qps_worker
         self.process()
     
     def process(self, child_process_num=1):
@@ -44,6 +48,27 @@ class Forkcore(object):
                     epoll.register(conn.fileno(), select.EPOLLIN|select.EPOLLET)
                     self.conn_list.append(conn)
                 else:
-                    for conn in self.conn.list:
+                    for conn in self.conn_list:
                         if fd == conn.fileno():
                             self.worker(conn)
+
+    def worker_process(self, line):
+        if line.find('qps') != -1:
+            self.qps_worker(line)
+        if line.find('time') != -1:
+            self.time_worker(line)
+
+    def worker(self, conn):
+        msg = conn.recv(1024)
+        if self.incomplete_line:
+            pos = msg.find('\n')
+            self.unread_line = msg[:pos]
+            msg = msg[pos+1:]
+            self.left_line = self.incomplete_line + self.unread_line
+        pos = msg.rfind('\n')
+        self.incomplete_line = msg[pos+1:]
+        msg = msg[:pos]
+        lines = msg.split('\n')
+        for line in lines:
+            self.worker_process(line)
+        self.worker_process(self.left_line)
