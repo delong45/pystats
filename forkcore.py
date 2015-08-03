@@ -77,3 +77,4 @@ class Forkcore(object):
         for line in lines:
             self.worker_process(line)
         self.worker_process(self.left_line)
+        self.left_line = ''
