@@ -13,7 +13,7 @@ class Forkcore(object):
         s.bind(("", port))
         s.listen(5000)
         self.s = s
-        self.conn_list = []
+        self.connections = {}
         self.incomplete_line = ''
         self.unread_line = ''
         self.left_line = ''
@@ -38,19 +38,18 @@ class Forkcore(object):
             t.join()
     
     def epoll(self):
-        epoll = select.epoll()
-        epoll.register(self.s.fileno(), select.EPOLLIN|select.EPOLLET)
+        self.epoll = select.epoll()
+        self.epoll.register(self.s.fileno(), select.EPOLLIN|select.EPOLLET)
         while True:
-            epoll_list = epoll.poll()
+            epoll_list = self.epoll.poll()
             for fd,events in epoll_list:
                 if fd == self.s.fileno():
                     conn,addr = self.s.accept()
-                    epoll.register(conn.fileno(), select.EPOLLIN|select.EPOLLET)
-                    self.conn_list.append(conn)
+                    self.epoll.register(conn.fileno(), select.EPOLLIN)
+                    self.connections[conn.fileno()] = conn
                 else:
-                    for conn in self.conn_list:
-                        if fd == conn.fileno():
-                            self.worker(conn)
+                    conn = self.connections[fd]
+                    self.worker(conn)
 
     def worker_process(self, line):
         if line.find('qps') != -1:
@@ -60,11 +59,17 @@ class Forkcore(object):
 
     def worker(self, conn):
         msg = conn.recv(1024)
+        if msg == '':
+            self.epoll.unregister(conn.fileno())
+            self.connections.pop(conn.fileno())    
+            conn.close()
+
         if self.incomplete_line:
             pos = msg.find('\n')
             self.unread_line = msg[:pos]
             msg = msg[pos+1:]
             self.left_line = self.incomplete_line + self.unread_line
+            
         pos = msg.rfind('\n')
         self.incomplete_line = msg[pos+1:]
         msg = msg[:pos]
