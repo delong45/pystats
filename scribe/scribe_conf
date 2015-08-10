@@ -1,0 +1,22 @@
+[category]
+access = 1
+error = 0 
+subreq = 0 
+uve_core = 0 
+
+[access]
+path = /data0/nginx/logs
+
+[error]
+path = /data0/nginx/logs
+
+[subreq]
+path = /data0/nginx/logs
+
+[uve_core]
+path = /data0/nginx/logs/uve_core/stats
+
+[scribe]
+host = 10.77.96.122
+port = 1463
+prefix = 111.13.89.127|

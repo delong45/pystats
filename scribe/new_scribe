@@ -1,0 +1,178 @@
+#!/usr/bin/env python
+
+import ConfigParser
+import os
+import sys
+import time
+from watchdog.observers import Observer
+from watchdog.events import PatternMatchingEventHandler
+from thrift.transport import TTransport
+from thrift.transport import TSocket
+from thrift.transport.TTransport import TTransportException
+from thrift.protocol import TBinaryProtocol
+from scribe import scribe
+
+class Scribe(object):
+    def __init__(self, host, port, prefix='', postfix=''):
+        self.host = host
+        self.port = port
+        self.prefix = prefix
+        self.postfix = postfix
+
+    def connect(self):
+        socket = TSocket.TSocket(host=self.host, port=self.port)
+        transport = TTransport.TFramedTransport(socket)
+        protocol = TBinaryProtocol.TBinaryProtocol(
+            trans=transport,
+            strictRead=False,
+            strictWrite=False,
+        )
+        client = scribe.Client(iprot=protocol, oprot=protocol)
+        self.client = client
+        self.transport = transport
+        transport.open()
+ 
+    def send(self, category, line):
+        result = 0
+        try:
+            log_entry = scribe.LogEntry(
+                category=category,
+                message=self.prefix+line+self.postfix,
+            )
+        except TypeError:
+            self.scribe_fix_legacy()
+            log_entry = scribe.LogEntry(
+                category=category,
+                message=self.prefix+line+self.postfix,
+            )
+
+        result = self.client.Log(messages=[log_entry])
+        if result == scribe.ResultCode.OK:
+            pass
+        elif result == scribe.ResultCode.TRY_LATER:
+            raise Error('Scribe Error: TRY LATER')
+        else:
+            raise Error('Scribe Error: Unknown error code (%s)' % result)
+
+    def scribe_fix_legacy(self):
+        global scribe
+        old_log_entry = scribe.LogEntry
+        def new_log_entry(**kwargs):
+            return old_log_entry(kwargs)
+        scribe.LogEntry = new_log_entry
+
+class LogHandler(PatternMatchingEventHandler):
+
+    def __init__(self, scribe_client, category):
+        PatternMatchingEventHandler.__init__(self)
+        self.scribe_client = scribe_client
+        self.category = category
+        self.fs = {}
+
+    def open(self, path):
+        f = open(path)
+        f.seek(0, 2)
+        pos = f.tell()
+        inode = os.stat(path).st_ino
+        self.fs[path] = {}
+        self.fs[path]['fp'] = f
+        self.fs[path]['pos'] = pos
+        self.fs[path]['inode'] = inode
+        return f
+    
+    def check(self, path):
+        stat = os.stat(path)
+        if self.fs[path]['inode'] != stat.st_ino:
+            return True
+        if self.fs[path]['pos'] > stat.st_size:
+            return True
+        return False
+
+    def process(self, event):
+        if not self.fs.has_key(event.src_path):
+            self.open(event.src_path)
+        else:
+            if self.check(event.src_path):
+                f = self.fs[event.src_path]
+                f.close()
+                self.open(event.src_path)
+
+        f = self.fs[event.src_path]['fp']
+        while True:
+            self.fs[event.src_path]['pos'] = f.tell()
+            line = f.readline()
+            if not line:
+                break
+            else:
+                print line
+
+    def on_modified(self, event):
+        self.process(event)
+
+    def on_created(self, event):
+        self.process(event)
+        
+class AccessHandler(LogHandler): 
+    patterns = ['*_access.log']
+
+    def __init__(self, scribe_client, category):
+        LogHandler.__init__(self, scribe_client, category)
+
+class ErrorHandler(LogHandler): 
+    patterns = ['*error.log']
+
+    def __init__(self, scribe_client, category):
+        LogHandler.__init__(self, scribe_client, category)
+
+class SubreqHandler(LogHandler): 
+    patterns = ['*_subreq.log']
+
+    def __init__(self, scribe_client, category):
+        LogHandler.__init__(self, scribe_client, category)
+
+class StatsHandler(LogHandler): 
+    patterns = ['*_stats_v2.txt']
+
+    def __init__(self, scribe_client, category):
+        LogHandler.__init__(self, scribe_client, category)
+
+if __name__ == '__main__':
+    try:
+        cf = ConfigParser.ConfigParser()
+
+        cf.read('scribe_conf')
+        host = cf.get('scribe', 'host')
+        port = cf.getint('scribe', 'port')
+        prefix = cf.get('scribe', 'prefix')
+        srb = Scribe(host, port, prefix)
+        srb.connect()
+    except Exception, e:
+        print e
+        sys.exit(1)
+          
+    observer = Observer()
+    opts = cf.options('category')
+    for opt in opts: 
+        start = cf.getint('category', opt)
+        if start:
+            path = cf.get(opt, 'path')
+            if opt == 'access':
+                observer.schedule(AccessHandler(srb, opt), path=path, recursive=False)
+            elif opt == 'error':
+                observer.schedule(ErrorHandler(srb, opt), path=path, recursive=False)
+            elif opt == 'subreq':
+                observer.schedule(SubreqHandler(srb, opt), path=path, recursive=False)
+            elif opt == 'uve_core':
+                observer.schedule(StatsHandler(srb, opt), path=path, recursive=True)
+            else:
+                print('No such category')
+                sys.exit(1)
+    observer.start()
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+
+    observer.join()
