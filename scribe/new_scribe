@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 
-import ConfigParser
 import os
 import sys
 import time
+import optparse
+import ConfigParser
+import logging
+from multiprocessing import Process
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 from thrift.transport import TTransport
@@ -70,15 +73,18 @@ class LogHandler(PatternMatchingEventHandler):
         self.fs = {}
 
     def open(self, path):
-        f = open(path)
-        f.seek(0, 2)
-        pos = f.tell()
-        inode = os.stat(path).st_ino
-        self.fs[path] = {}
-        self.fs[path]['fp'] = f
-        self.fs[path]['pos'] = pos
-        self.fs[path]['inode'] = inode
-        return f
+        try:
+            f = open(path)
+            f.seek(0, 2)
+            pos = f.tell()
+            inode = os.stat(path).st_ino
+            self.fs[path] = {}
+            self.fs[path]['fp'] = f
+            self.fs[path]['pos'] = pos
+            self.fs[path]['inode'] = inode
+            return f
+        except Exception:
+            pass
     
     def check(self, path):
         stat = os.stat(path)
@@ -89,28 +95,37 @@ class LogHandler(PatternMatchingEventHandler):
         return False
 
     def process(self, event):
+        if not os.path.isfile(event.src_path):
+            return
+
         if not self.fs.has_key(event.src_path):
             self.open(event.src_path)
         else:
             if self.check(event.src_path):
-                f = self.fs[event.src_path]
+                f = self.fs[event.src_path]['fp']
                 f.close()
                 self.open(event.src_path)
 
         f = self.fs[event.src_path]['fp']
-        while True:
+        while True: 
             self.fs[event.src_path]['pos'] = f.tell()
             line = f.readline()
             if not line:
                 break
             else:
-                print line
+                self.scribe_client.send(self.category, line)
 
     def on_modified(self, event):
-        self.process(event)
+        try:
+            self.process(event)
+        except Exception:
+            pass
 
     def on_created(self, event):
-        self.process(event)
+        try:
+            self.process(event)
+        except Exception:
+            pass
         
 class AccessHandler(LogHandler): 
     patterns = ['*_access.log']
@@ -131,48 +146,109 @@ class SubreqHandler(LogHandler):
         LogHandler.__init__(self, scribe_client, category)
 
 class StatsHandler(LogHandler): 
-    patterns = ['*_stats_v2.txt']
+    patterns = ['*stats*']
 
     def __init__(self, scribe_client, category):
         LogHandler.__init__(self, scribe_client, category)
 
-if __name__ == '__main__':
-    try:
-        cf = ConfigParser.ConfigParser()
+    def get_timestamp(self, path):
+        list = path.split('/')
+        data = list[6]
+        hour = list[7]
+        nowtime = data + ':' + hour
+        timearray = time.strptime(nowtime, "%Y-%m-%d:%H")
+        timestamp = int(time.mktime(timearray))
+        return timestamp
 
-        cf.read('scribe_conf')
-        host = cf.get('scribe', 'host')
-        port = cf.getint('scribe', 'port')
-        prefix = cf.get('scribe', 'prefix')
-        srb = Scribe(host, port, prefix)
-        srb.connect()
-    except Exception, e:
-        print e
-        sys.exit(1)
-          
-    observer = Observer()
-    opts = cf.options('category')
-    for opt in opts: 
-        start = cf.getint('category', opt)
-        if start:
-            path = cf.get(opt, 'path')
-            if opt == 'access':
-                observer.schedule(AccessHandler(srb, opt), path=path, recursive=False)
-            elif opt == 'error':
-                observer.schedule(ErrorHandler(srb, opt), path=path, recursive=False)
-            elif opt == 'subreq':
-                observer.schedule(SubreqHandler(srb, opt), path=path, recursive=False)
-            elif opt == 'uve_core':
-                observer.schedule(StatsHandler(srb, opt), path=path, recursive=True)
+    def check(self, path):
+        if len(self.fs) > 0:
+            now_time = self.get_timestamp(path)
+            paths = self.fs.keys()
+            old_time = self.get_timestamp(paths[0])
+            if now_time > old_time:
+                for src_path in paths:
+                    f = self.fs[src_path]['fp']
+                    f.close()
+                self.fs.clear()
+
+    def process(self, event):
+        if not os.path.isfile(event.src_path):
+            return
+
+        if not self.fs.has_key(event.src_path):
+            self.check(event.src_path)
+            self.open(event.src_path)
+
+        f = self.fs[event.src_path]['fp']
+        while True: 
+            self.fs[event.src_path]['pos'] = f.tell()
+            line = f.readline()
+            if not line:
+                break
             else:
-                print('No such category')
-                sys.exit(1)
+                self.scribe_client.send(self.category, line)
+
+def ThreadHandler(host, port, prefix, category, path):
+    observer = Observer()
+    srb = Scribe(host, port, prefix)
+    srb.connect()
+
+    if category == 'access':
+        observer.schedule(AccessHandler(srb, category), path=path, recursive=False)
+    elif category == 'error':
+        observer.schedule(ErrorHandler(srb, category), path=path, recursive=False)
+    elif category == 'subreq':
+        observer.schedule(SubreqHandler(srb, category), path=path, recursive=False)
+    elif category == 'uve_core':
+        observer.schedule(StatsHandler(srb, category), path=path, recursive=True)
+    else:
+        print('No such category')
+        sys.exit(1)
     observer.start()
 
     try:
         while True:
             time.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
+    except Exception:
+        pass
 
+    #can't execute here
+    observer.stop()
     observer.join()
+
+if __name__ == '__main__':
+    parser = optparse.OptionParser()
+    parser.add_option('-c', '--config',
+                     dest='config_file',
+                     help='configuration file',
+                     metavar='CONFIG')
+    options, args = parser.parse_args()
+
+    if options.config_file:
+        try:
+            cf = ConfigParser.ConfigParser()
+
+            cf.read('scribe_conf')
+            host = cf.get('scribe', 'host')
+            port = cf.getint('scribe', 'port')
+            prefix = cf.get('scribe', 'prefix')
+            opts = cf.options('category')
+            for opt in opts: 
+                start = cf.getint('category', opt)
+                if start:
+                    path = cf.get(opt, 'path')
+                    p = Process(target=ThreadHandler, args=(host, port, prefix, opt, path))
+                    p.daemon = True
+                    p.start()
+        except Exception, e:
+            print e
+            sys.exit(1)
+    else:
+        parser.print_help()
+        sys.exit(1)
+          
+    try:
+        while True:
+            time.sleep(1)
+    except Exception:
+        pass
