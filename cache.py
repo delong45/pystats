@@ -92,8 +92,8 @@ class Cache(object):
             count = item[key]['count']
             sum = item[key]['sum']
             value = float(sum) / float(count)
-            mean = key + '.mean ' + str(value) + ' ' + str(timestamp) + '\n'
-            total = key + '.total' + int(sum) + ' ' + str(timestamp) + '\n'
+            mean = key + '.mean' + ' ' + str(value) + ' ' + str(timestamp) + '\n'
+            total = key + '.total' + ' ' + str(sum) + ' ' + str(timestamp) + '\n'
             line = mean + total
             if msg:
                 msg += line
