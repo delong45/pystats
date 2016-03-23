@@ -150,8 +150,13 @@ class Cache(object):
             line += key + '.90% ' + str(list[percent90]) + ' ' + str(timestamp) + '\n'
             percent99 = int(length*0.99) - 1
             line += key + '.99% ' + str(list[percent99]) + ' ' + str(timestamp) + '\n'
-            percent100 = length - 1
-            line += key + '.max ' + str(list[percent100]) + ' ' + str(timestamp) + '\n'
+
+            percent_min = 0
+            line += key + '.min ' + str(list[percent_min]) + ' ' + str(timestamp) + '\n'
+            percent_max = length - 1
+            line += key + '.max ' + str(list[percent_max]) + ' ' + str(timestamp) + '\n'
+            mean = sum(list) / length
+            line += key + '.mean ' + str(mean) + ' ' + str(timestamp) + '\n'
 
             msg += line
         return msg
