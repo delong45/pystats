@@ -83,9 +83,10 @@ class Tail(object):
 
 class Parser(object):
 
-    def __init__(self, stats, category):
+    def __init__(self, stats, category, ip):
         self.stats = stats
         self.category = category
+        self.ip = ip
         self.operator = {'access':self.__access,
                          'error':self.__error,
                          'subreq':self.__subreq}
@@ -155,9 +156,15 @@ class Parser(object):
                 exception_status_key = 'uve.subreq.exception_status_qps.' + interface
                 self.stats.incr(exception_status_key, timestamp)
 
-def handle(path, begin, category, host='127.0.0.1', port=2003):
+            if self.ip != 'localhost':
+                ip = self.ip.replace('.', '_')
+                percentile_key = 'uve.subreq.percentile.' + interface + '.' + ip
+                self.stats.percentile(percentile_key, timestamp, rtime*1000)
+
+
+def handle(path, begin, category, host='127.0.0.1', port=2003, ip='locahost'):
     stats = cache.vCache(host, port)
-    log_parser = Parser(stats, category)
+    log_parser = Parser(stats, category, ip)
     tail = Tail(path, begin)
     try: 
         tail.open()
@@ -192,6 +199,10 @@ if __name__ == '__main__':
                       dest='category',
                       default='access',
                       help='which category of file to collect',)
+    parser.add_option('-i', '--ip',
+                     dest='ip',
+                     default='localhost',
+                     help='ip of local host',)
     options, args = parser.parse_args()
 
     if options.file:
@@ -200,7 +211,8 @@ if __name__ == '__main__':
                    begin=options.begin,
                    category=options.category,
                    host=options.host,
-                   port=options.port)
+                   port=options.port,
+                   ip=options.ip)
         except KeyboardInterrupt:
             sys.exit(0)
     else:

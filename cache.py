@@ -13,6 +13,7 @@ class Cache(object):
         self.max_size = max_size
         self.counter_cache = {}
         self.timer_cache = {}
+        self.percenter_cache = {}
         self.connect()
 
     def connect(self):
@@ -25,6 +26,17 @@ class Cache(object):
             self.connect()
         except Exception:
             pass
+
+    def write_graphite(self, msg):
+        ip = '10.77.96.122'
+        port = 2003
+        try:
+            self.graphite_sock.send(msg)
+        except Exception:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((ip, port))
+            sock.send(msg)
+            self.graphite_sock = sock
 
     def incr(self, key, timestamp, value=1):
         if self.counter_cache.has_key(timestamp):
@@ -42,16 +54,19 @@ class Cache(object):
         timer = {}
         timer['count'] = num
         timer['sum'] = value
-        timer['list'] = []
-        timer['list'].append(value)
         return timer
+
+    def create_percenter(self, value):
+        percenter = {}
+        percenter['list'] = []
+        percenter['list'].append(value)
+        return percenter
 
     def timing(self, key, timestamp, value, num=1):
         if self.timer_cache.has_key(timestamp):
             if self.timer_cache[timestamp].has_key(key):
                 self.timer_cache[timestamp][key]['count'] += num
                 self.timer_cache[timestamp][key]['sum'] += value
-                self.timer_cache[timestamp][key]['list'].append(value)
             else:
                 new_timer = self.create_timer(value, num)
                 self.timer_cache[timestamp][key] = {}
@@ -64,12 +79,31 @@ class Cache(object):
             self.timer_cache[timestamp][key] = {}
             self.timer_cache[timestamp][key] = new_timer
 
+    def percentile(self, key, timestamp, value):
+        if self.percenter_cache.has_key(timestamp):
+            if self.percenter_cache[timestamp].has_key(key):
+                self.percenter_cache[timestamp][key]['list'].append(value)
+            else:
+                new_percenter = self.create_percenter(value)
+                self.percenter_cache[timestamp][key] = {}
+                self.percenter_cache[timestamp][key] = new_percenter
+        else:
+            if self.is_full('percenter'):
+                self.send('percenter')
+            new_percenter = self.create_percenter(value)
+            self.percenter_cache[timestamp] = {}
+            self.percenter_cache[timestamp][key] = {}
+            self.percenter_cache[timestamp][key] = new_percenter
+
     def is_full(self, category):
         if category == 'counter':
             if len(self.counter_cache) == self.max_size:    
                 return True
         elif category == 'timer':
             if len(self.timer_cache) == self.max_size:
+                return True
+        elif category == 'percenter':
+            if len(self.percenter_cache) == self.max_size:
                 return True
         return False
 
@@ -92,13 +126,34 @@ class Cache(object):
             count = item[key]['count']
             sum = item[key]['sum']
             value = float(sum) / float(count)
-            mean = key + '.mean' + ' ' + str(value) + ' ' + str(timestamp) + '\n'
-            total = key + '.total' + ' ' + str(sum) + ' ' + str(timestamp) + '\n'
-            line = mean + total
+            line = key + '.mean ' + str(value) + ' ' + str(timestamp) + '\n'
             if msg:
                 msg += line
             else:
                 msg = line
+        return msg
+
+    def percenter_format(self, timestamp, item):
+        msg = ''
+        keys = item.keys()
+        for key in keys:
+            list = item[key]['list']
+            length = len(list)
+            list.sort()
+
+            line = ''
+            percent50 = int(length*0.5) - 1
+            line += key + '.50% ' + str(list[percent50]) + ' ' + str(timestamp) + '\n'
+            percent70 = int(length*0.7) - 1
+            line += key + '.70% ' + str(list[percent70]) + ' ' + str(timestamp) + '\n'
+            percent90 = int(length*0.9) - 1
+            line += key + '.90% ' + str(list[percent90]) + ' ' + str(timestamp) + '\n'
+            percent99 = int(length*0.99) - 1
+            line += key + '.99% ' + str(list[percent99]) + ' ' + str(timestamp) + '\n'
+            percent100 = length - 1
+            line += key + '.max ' + str(list[percent100]) + ' ' + str(timestamp) + '\n'
+
+            msg += line
         return msg
 
     def send(self, category):
@@ -106,6 +161,8 @@ class Cache(object):
             cache = self.counter_cache
         elif category == 'timer':
             cache = self.timer_cache
+        elif category == 'percenter':
+            cache = self.percenter_cache
 
         keys = cache.keys()
         keys.sort()
@@ -117,10 +174,16 @@ class Cache(object):
                 msg = self.counter_format(key, item)
             elif category == 'timer':
                 msg = self.timer_format(key, item)
-            try:
-                self.sock.send(msg)
-            except Exception:
-                self.reconnect()
+            elif category == 'percenter':
+                msg = self.percenter_format(key, item)
+
+            if category == 'percenter':
+                self.write_graphite(msg)
+            else:
+                try:
+                    self.sock.send(msg)
+                except Exception:
+                    self.reconnect()
 
 class vCache(Cache):
 
